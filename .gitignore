@@ -1,0 +1,35 @@
+# dependencies
+node_modules/
+
+# build outputs
+dist/
+dist-ssr/
+coverage/
+.vite/
+
+# local environment
+.env
+.env.*
+!.env.example
+
+# logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# editor / os
+.DS_Store
+.idea/
+.vscode/
+
+# temporary files
+tmp/
+temp/
+*.tmp
+
+# local test artifacts
+playwright-report/
+test-results/
+
