@@ -519,6 +519,16 @@ button:hover {
     linear-gradient(180deg, rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.08));
 }
 
+.viewer-viewport__empty-state--loading {
+  background:
+    linear-gradient(180deg, rgba(239, 246, 255, 0.65), rgba(255, 255, 255, 0.12));
+}
+
+.viewer-viewport__empty-state--error {
+  background:
+    linear-gradient(180deg, rgba(254, 242, 242, 0.72), rgba(255, 255, 255, 0.16));
+}
+
 .viewer-viewport__empty-state h1 {
   margin: 0;
   color: #0f172a;
@@ -702,6 +712,11 @@ button:hover {
 
 .viewer-statusbar__item {
   white-space: nowrap;
+}
+
+.viewer-statusbar__item--error {
+  color: #b91c1c;
+  font-weight: 700;
 }
 
 /* ifc-ln inspired panel density and internal scroll behavior */

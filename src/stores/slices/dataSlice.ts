@@ -29,6 +29,7 @@ export interface DataSlice {
   selectedProperties: IfcElementProperties;
   propertiesLoading: boolean;
   propertiesError: string | null;
+  viewerError: string | null;
   engineState: 'idle' | 'initializing' | 'ready' | 'error';
   engineMessage: string;
   setCurrentFileName: (currentFileName: string | null) => void;
@@ -46,6 +47,8 @@ export interface DataSlice {
   setSelectedProperties: (selectedProperties: IfcElementProperties) => void;
   clearSelectedProperties: () => void;
   setPropertiesState: (propertiesLoading: boolean, propertiesError?: string | null) => void;
+  setViewerError: (viewerError: string | null) => void;
+  clearViewerError: () => void;
   setEngineState: (engineState: DataSlice['engineState'], engineMessage: string) => void;
 }
 
@@ -65,6 +68,7 @@ export const createDataSlice: StateCreator<DataSlice, [], [], DataSlice> = (set)
   selectedProperties: emptyProperties,
   propertiesLoading: false,
   propertiesError: null,
+  viewerError: null,
   engineState: 'idle',
   engineMessage: '엔진 초기화 전',
   setCurrentFileName: (currentFileName) => set({ currentFileName }),
@@ -88,5 +92,7 @@ export const createDataSlice: StateCreator<DataSlice, [], [], DataSlice> = (set)
     set({ selectedProperties: emptyProperties, propertiesLoading: false, propertiesError: null }),
   setPropertiesState: (propertiesLoading, propertiesError = null) =>
     set({ propertiesLoading, propertiesError }),
+  setViewerError: (viewerError) => set({ viewerError }),
+  clearViewerError: () => set({ viewerError: null }),
   setEngineState: (engineState, engineMessage) => set({ engineState, engineMessage }),
 });

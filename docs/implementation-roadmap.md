@@ -20,6 +20,9 @@
   - 패널 스크롤, 리사이저, 디버그 패널 분리
   - 1차 성능 최적화: geometry cache, `InstancedMesh`, BVH picking
 - 아직 남은 핵심:
+  - 실제 progressive streaming 전환
+  - 필터-선택 상태 동기화
+  - 트리 성능 및 UX 안정화
   - 관계 정보 확장
   - 속성 편집 v1
   - save / export
@@ -81,6 +84,8 @@
 - [부분 완료] 뷰포트 안정화
 - [부분 완료] 패널 안정화
 - [부분 완료] 하이어라키 UX 마무리
+- [부분 완료] progressive streaming / error 상태 노출
+- [부분 완료] 필터와 selection 상태 동기화
 - [부분 완료] 속성 패널의 관계 정보 확장
 - [미완료] 속성 수정
 - [미완료] undo / redo
@@ -179,6 +184,8 @@ IFC geometry를 추출해 viewport에 렌더링하고 기본 3D 상호작용을 
 - [완료] `StreamAllMeshes` 구현
 - [완료] typed array Transferable 전송
 - [완료] geometry summary 계산
+- [부분 완료] 실제 progressive chunk 전송은 아직 미반영
+- [부분 완료] 대형 IFC에서 worker->main 대량 전송 메모리 피크 가능성 있음
 
 관련 파일:
 
@@ -191,6 +198,8 @@ IFC geometry를 추출해 viewport에 렌더링하고 기본 3D 상호작용을 
 - [완료] raw vertex 배열을 render 가능한 geometry로 변환
 - [완료] 카메라 fit, orbit controls, 기본 조명 구성
 - [부분 완료] WebGL 차단 환경 대응은 1차 반영, 추가 fallback UX 보강 여지 있음
+- [부분 완료] 로드/worker 오류 상태를 viewport에 일관되게 노출하는 구조 보강 필요
+- [부분 완료] empty state 문구와 실제 현재 단계 간 싱크 정리 필요
 
 관련 파일:
 
@@ -203,6 +212,7 @@ IFC geometry를 추출해 viewport에 렌더링하고 기본 3D 상호작용을 
 - [완료] `InstancedMesh`
 - [완료] BVH picking
 - [완료] viewport geometry store 분리
+- [부분 완료] progressive rendering으로 이어질 수 있는 scene update 구조는 아직 미완성
 
 관련 파일:
 
@@ -234,6 +244,9 @@ IFC geometry를 추출해 viewport에 렌더링하고 기본 3D 상호작용을 
 - [완료] 디렉토리형 트리 UI 개선
 - [완료] 좌측 패널 내부 스크롤 안정화
 - [완료] `Spatial / Class / Type` 탭 반영
+- [부분 완료] 검색 시 전체 트리 재귀 복제/재렌더가 일어나 대형 모델 성능 최적화 필요
+- [부분 완료] tree selection과 스크롤 위치 동기화 미구현
+- [부분 완료] virtualized tree 또는 debounce 검토 필요
 
 관련 파일:
 
@@ -249,6 +262,7 @@ IFC geometry를 추출해 viewport에 렌더링하고 기본 3D 상호작용을 
 - [완료] `Type Properties` 조회
 - [완료] `Materials` 조회
 - [부분 완료] 관계 정보, inverse relation 정보는 아직 미표시
+- [부분 완료] 동일 엔티티 재선택 시 property cache 부재
 
 관련 파일:
 
@@ -284,6 +298,8 @@ IFC geometry를 추출해 viewport에 렌더링하고 기본 3D 상호작용을 
 - [완료] storey filter
 - [완료] fit selected
 - [완료] home camera
+- [부분 완료] 필터로 숨겨진 selection 정리 규칙이 아직 없음
+- [부분 완료] 필터 active 상태와 viewport/debug/status 표현 일관성 보강 필요
 
 #### Step 5.4 - Camera UX
 
@@ -298,17 +314,63 @@ IFC geometry를 추출해 viewport에 렌더링하고 기본 3D 상호작용을 
 - [부분 완료] 하이어라키 디렉토리형 UI 고도화
 - [부분 완료] 헤더 중복 조작 제거 및 조작/상태 역할 분리
 - [부분 완료] 디버그 패널을 상태창 중심으로 정리
+- [미완료] progressive streaming 전환 또는 chunked rendering 전략 정리
+- [미완료] 로드/worker 오류를 store와 viewport에 일관되게 표기
 - [미완료] 뷰포트 빈 상태 / fallback UX 추가 정리
 - [미완료] 트리 expand/collapse 성능 및 긴 모델 UX 추가 검증
 - [미완료] 선택 상태와 트리 스크롤 동기화 보강
+- [미완료] filter-selection 충돌 시 정책 정리 및 구현
+- [미완료] IFC class 분류 로직 공용화
+
+### Phase 3~5 부족한 부분 요약
+
+#### Phase 3 - First Render
+
+- `StreamAllMeshes`를 사용하지만 실제로는 한 번에 모아서 전송하고 있어 “진짜 streaming”은 아님
+- 로딩/오류/empty/fallback 상태가 분산되어 있어 디버깅과 사용자 피드백이 약함
+- progressive render로 확장 가능한 구조 정리가 더 필요함
+
+#### Phase 4 - Inspect
+
+- 큰 spatial tree에서 검색과 expand/collapse 성능 검증이 아직 부족함
+- 선택된 엔티티가 트리에서 자동으로 드러나거나 스크롤되는 UX가 없음
+- relations / inverse relations가 아직 표시되지 않음
+
+#### Phase 5 - Operate
+
+- 필터와 selection이 충돌할 때 정책이 없음
+- viewport / debug / toolbar / panel 간 상태 표현이 완전히 일치하지 않을 수 있음
+- class/type/storey 관련 공용 유틸 정리가 더 필요함
 
 ### 안정화 스프린트 권장 체크리스트
 
-1. 대형 IFC에서 좌우 패널이 길어져도 중앙 뷰포트 높이가 고정되는지 확인
-2. 트리 expand/collapse가 긴 모델에서도 과도하게 느려지지 않는지 확인
-3. 선택 객체가 바뀔 때 트리, 속성 패널, 뷰포트 하이라이트가 계속 일치하는지 확인
-4. WebGL 불가 환경에서 fallback 메시지와 비3D UX가 충분히 읽히는지 확인
-5. 모바일 또는 좁은 폭에서 툴바/패널이 과도하게 깨지지 않는지 확인
+#### A. 구현 체크리스트
+
+1. `STREAM_MESHES`를 chunk 단위 전송 또는 progressive render 구조로 재설계
+2. `useWebIfc`에 로드/worker 오류 상태를 실제로 노출하고 viewport/debug/status에 연결
+3. 필터로 선택 엔티티가 숨겨질 때 `선택 해제 / 유지 / 경고` 정책 확정 후 구현
+4. `resolveIfcClass()`를 공용 유틸로 추출해 class filter와 viewport filter가 같은 기준을 쓰게 정리
+5. hierarchy search 입력에 debounce 또는 최소 최적화 적용
+6. 선택된 spatial node가 트리에서 보이도록 auto-expand / scroll-into-view 전략 추가
+7. viewport empty state, fallback copy, debug 상태 문구를 현재 단계 기준으로 정리
+
+#### B. 개발모드 테스트 체크리스트
+
+1. 큰 IFC를 열었을 때 첫 렌더까지 UI가 완전히 멎지 않는지 확인
+2. 로딩 실패 또는 worker 오류를 강제로 만들었을 때 오류 메시지가 viewport/debug/status에 보이는지 확인
+3. 타입/클래스/층 필터를 적용한 뒤 기존 selection이 숨겨지면 상태가 일관되게 바뀌는지 확인
+4. 긴 트리에서 검색, expand/collapse, 선택이 과도하게 느려지지 않는지 확인
+5. 트리에서 선택한 엔티티와 3D에서 클릭한 엔티티가 계속 동일하게 표시되는지 확인
+6. WebGL 불가 환경에서 fallback 메시지와 비3D UX가 충분히 읽히는지 확인
+7. 좁은 폭과 일반 데스크톱 폭 모두에서 툴바/패널/뷰포트가 깨지지 않는지 확인
+
+#### C. 통과 조건
+
+1. 대형 IFC 기준으로 로드 직후 툴바와 패널 반응이 유지된다
+2. 필터, 선택, 속성, 뷰포트 하이라이트가 서로 어긋나지 않는다
+3. 오류 상태가 숨지 않고 사용자에게 보인다
+4. 트리와 패널이 길어져도 중앙 뷰포트 레이아웃이 흔들리지 않는다
+5. 이후 `Edit v1`로 넘어가도 될 만큼 상태 동기화 규칙이 명확하다
 
 ---
 
@@ -364,12 +426,15 @@ IFC geometry를 추출해 viewport에 렌더링하고 기본 3D 상호작용을 
 
 현재 기준 다음 작업 우선순위는 아래 순서가 가장 자연스럽다.
 
-1. `Phase 5.5 - 안정화 스프린트 마무리`
-2. `Phase 6.1 - 속성 편집 v1`
-3. `Phase 6.2 - dirty state / undo-redo`
-4. `Phase 6.3 - save / export`
-5. `Phase 7.1 - fallback / 회귀 테스트`
-6. `Phase 7.2 - 멀티 모델`
+1. `Phase 5.5.1 - error state / fallback 정리`
+2. `Phase 5.5.2 - filter-selection 동기화`
+3. `Phase 5.5.3 - hierarchy 성능 / UX 보강`
+4. `Phase 5.5.4 - progressive streaming 설계 또는 1차 적용`
+5. `Phase 6.1 - 속성 편집 v1`
+6. `Phase 6.2 - dirty state / undo-redo`
+7. `Phase 6.3 - save / export`
+8. `Phase 7.1 - fallback / 회귀 테스트`
+9. `Phase 7.2 - 멀티 모델`
 
 ---
 

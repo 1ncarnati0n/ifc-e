@@ -1,9 +1,10 @@
 import { ChevronDown, ChevronUp } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useWebIfc } from '@/hooks/useWebIfc';
 import { useViewportGeometry } from '@/services/viewportGeometryStore';
 import { useViewerStore } from '@/stores';
 import type { IfcSpatialNode } from '@/types/worker-messages';
+import { resolveIfcClass } from '@/utils/ifc-class';
 import { ViewportScene } from './ViewportScene';
 
 function findStoreyNode(nodes: IfcSpatialNode[], targetStoreyId: number): IfcSpatialNode | null {
@@ -25,34 +26,6 @@ function collectDescendantIds(node: IfcSpatialNode, result = new Set<number>()) 
   result.add(node.expressID);
   node.children.forEach((child) => collectDescendantIds(child, result));
   return result;
-}
-
-function resolveIfcClass(ifcType: string) {
-  if (ifcType.includes('WALL') || ifcType.includes('SLAB') || ifcType.includes('ROOF') || ifcType.includes('STAIR') || ifcType.includes('RAMP')) {
-    return 'Architecture';
-  }
-
-  if (ifcType.includes('COLUMN') || ifcType.includes('BEAM') || ifcType.includes('MEMBER') || ifcType.includes('PLATE') || ifcType.includes('PILE') || ifcType.includes('FOOTING')) {
-    return 'Structure';
-  }
-
-  if (ifcType.includes('DOOR') || ifcType.includes('WINDOW') || ifcType.includes('OPENING') || ifcType.includes('CURTAINWALL')) {
-    return 'Envelope';
-  }
-
-  if (ifcType.includes('FLOW') || ifcType.includes('DUCT') || ifcType.includes('PIPE') || ifcType.includes('CABLE') || ifcType.includes('TERMINAL') || ifcType.includes('ELECTRIC')) {
-    return 'MEP';
-  }
-
-  if (ifcType.includes('SPACE') || ifcType.includes('STOREY') || ifcType.includes('BUILDING') || ifcType.includes('SITE')) {
-    return 'Spatial';
-  }
-
-  if (ifcType.includes('FURNISHING') || ifcType.includes('EQUIPMENT')) {
-    return 'Equipment';
-  }
-
-  return 'Other';
 }
 
 export function ViewportContainer() {
@@ -79,6 +52,50 @@ export function ViewportContainer() {
     activeStoreyFilter,
   } = useWebIfc();
   const hasRenderableGeometry = geometryResult.ready && meshes.length > 0;
+  const emptyState = useMemo(() => {
+    if (error) {
+      return {
+        tone: 'error' as const,
+        title: '모델을 불러오지 못했습니다',
+        description: error,
+        hint: '다른 IFC 파일로 다시 시도하거나 엔진 상태와 worker 로그를 확인해 주세요.',
+      };
+    }
+
+    if (loading) {
+      return {
+        tone: 'loading' as const,
+        title: '모델을 준비하고 있습니다',
+        description: progress,
+        hint: 'geometry와 spatial tree를 순서대로 준비하는 중입니다.',
+      };
+    }
+
+    if (engineState !== 'ready') {
+      return {
+        tone: 'idle' as const,
+        title: '엔진 준비가 필요합니다',
+        description: engineMessage,
+        hint: '헤더에서 엔진을 초기화한 뒤 IFC 파일을 열면 바로 3D 뷰가 표시됩니다.',
+      };
+    }
+
+    if (!currentFileName) {
+      return {
+        tone: 'idle' as const,
+        title: 'IFC 파일을 열어 주세요',
+        description: '모델이 아직 로드되지 않았습니다.',
+        hint: '헤더의 열기 버튼으로 IFC 파일을 선택하면 뷰포트와 패널이 함께 채워집니다.',
+      };
+    }
+
+    return {
+      tone: 'idle' as const,
+      title: '렌더링 데이터를 기다리는 중입니다',
+      description: '모델 메타데이터는 열렸지만 아직 표시 가능한 geometry가 준비되지 않았습니다.',
+      hint: '대형 IFC의 경우 geometry 준비에 시간이 더 걸릴 수 있습니다.',
+    };
+  }, [currentFileName, engineMessage, engineState, error, loading, progress]);
   const entityIds = useMemo(() => [...new Set(meshes.map((mesh) => mesh.expressId))], [meshes]);
   const filteredHiddenIds = useMemo(() => {
     if (!hasRenderableGeometry) {
@@ -119,6 +136,30 @@ export function ViewportContainer() {
     () => [...new Set([...hiddenEntityIds, ...filteredHiddenIds])],
     [filteredHiddenIds, hiddenEntityIds]
   );
+  const effectiveHiddenIdSet = useMemo(() => new Set(effectiveHiddenIds), [effectiveHiddenIds]);
+  const activeFilterSummary = useMemo(() => {
+    const segments: string[] = [];
+    if (activeClassFilter) {
+      segments.push(`class ${activeClassFilter}`);
+    }
+    if (activeTypeFilter) {
+      segments.push(`type ${activeTypeFilter}`);
+    }
+    if (activeStoreyFilter) {
+      segments.push(`storey ${activeStoreyFilter}`);
+    }
+    return segments.length > 0 ? segments.join(' · ') : null;
+  }, [activeClassFilter, activeStoreyFilter, activeTypeFilter]);
+
+  useEffect(() => {
+    if (selectedEntityId === null) {
+      return;
+    }
+
+    if (effectiveHiddenIdSet.has(selectedEntityId)) {
+      setSelectedEntityId(null);
+    }
+  }, [effectiveHiddenIdSet, selectedEntityId, setSelectedEntityId]);
 
   return (
     <section className="viewer-viewport">
@@ -133,10 +174,10 @@ export function ViewportContainer() {
             onSelectEntity={setSelectedEntityId}
           />
         ) : (
-          <div className="viewer-viewport__empty-state">
-            <h1>Step 4.1 준비</h1>
-            <p>IFC 파일을 열면 이 영역에 실제 3D 모델이 바로 렌더링됩니다.</p>
-            <p>다음 단계부터는 클릭 선택과 패널 연동을 같은 viewport 위에서 검증합니다.</p>
+          <div className={`viewer-viewport__empty-state viewer-viewport__empty-state--${emptyState.tone}`}>
+            <h1>{emptyState.title}</h1>
+            <p>{emptyState.description}</p>
+            <p>{emptyState.hint}</p>
           </div>
         )}
         <div className="viewer-viewport__overlay">
@@ -178,8 +219,8 @@ export function ViewportContainer() {
                     <span>선택 상태</span>
                     <strong>{selectedEntityId ?? '없음'}</strong>
                     <small>
-                      {activeTypeFilter || activeStoreyFilter
-                        ? `필터 적용 중 · type ${activeTypeFilter ?? 'all'} · storey ${activeStoreyFilter ?? 'all'}`
+                      {activeFilterSummary
+                        ? `필터 적용 중 · ${activeFilterSummary}`
                         : '3D 객체 클릭 또는 좌측 패널 선택'}
                     </small>
                   </div>

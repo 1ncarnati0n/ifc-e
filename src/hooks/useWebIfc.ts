@@ -43,9 +43,12 @@ export function useWebIfc() {
     selectedProperties,
     propertiesLoading,
     propertiesError,
+    viewerError,
     setSelectedProperties,
     clearSelectedProperties,
     setPropertiesState,
+    setViewerError,
+    clearViewerError,
     engineState,
     engineMessage,
     setEngineState,
@@ -66,6 +69,7 @@ export function useWebIfc() {
     }
 
     try {
+      clearViewerError();
       setEngineState('initializing', 'web-ifc worker 초기화 중');
       const result = await ifcWorkerClient.init();
       setEngineState(
@@ -75,6 +79,7 @@ export function useWebIfc() {
           : 'web-ifc worker 준비 완료'
       );
     } catch (error) {
+      setViewerError(error instanceof Error ? error.message : 'web-ifc worker 초기화 실패');
       setEngineState(
         'error',
         error instanceof Error ? error.message : 'web-ifc worker 초기화 실패'
@@ -94,6 +99,7 @@ export function useWebIfc() {
     }
 
     setLoading(true, `${file.name} 로딩 중`);
+    clearViewerError();
     setGeometryReady(false);
     resetGeometrySummary();
     viewportGeometryStore.clear();
@@ -123,6 +129,7 @@ export function useWebIfc() {
       setGeometryReady(true);
       setLoading(false, `${file.name} 로딩 완료`);
     } catch (error) {
+      const message = error instanceof Error ? error.message : 'IFC 로딩 실패';
       setGeometryReady(false);
       resetGeometrySummary();
       viewportGeometryStore.clear();
@@ -131,9 +138,11 @@ export function useWebIfc() {
       clearSelectedProperties();
       resetFilters();
       setLoading(false, '로딩 실패');
+      setViewerError(message);
       throw error;
     }
   }, [
+    clearViewerError,
     clearSelectedProperties,
     clearSelection,
     clearSpatialTree,
@@ -148,6 +157,7 @@ export function useWebIfc() {
     setGeometrySummary,
     setLoading,
     setSpatialTree,
+    setViewerError,
   ]);
 
   const resetSession = useCallback(async () => {
@@ -165,6 +175,7 @@ export function useWebIfc() {
     }
 
     resetLoading();
+    clearViewerError();
     setCurrentFileName(null);
     clearCurrentModelInfo();
     setGeometryReady(false);
@@ -175,6 +186,7 @@ export function useWebIfc() {
     clearSelectedProperties();
     resetFilters();
   }, [
+    clearViewerError,
     clearSelectedProperties,
     clearSelection,
     clearCurrentModelInfo,
@@ -256,7 +268,7 @@ export function useWebIfc() {
     initEngine,
     loading: isLoading,
     progress: progressLabel,
-    error: null as string | null,
+    error: viewerError,
     currentFileName,
     currentModelId,
     currentModelSchema,
