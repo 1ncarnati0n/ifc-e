@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { TransferableMeshData } from '@/types/worker-messages';
@@ -15,6 +15,23 @@ interface MeshEntry {
   object: THREE.Mesh;
   baseColor: THREE.Color;
   baseOpacity: number;
+}
+
+function getWebGLBlockReason() {
+  const canvas = document.createElement('canvas');
+  const webgl2Context = canvas.getContext('webgl2');
+  if (webgl2Context) {
+    return null;
+  }
+
+  const webglContext =
+    canvas.getContext('webgl') ?? canvas.getContext('experimental-webgl');
+
+  if (webglContext) {
+    return null;
+  }
+
+  return '현재 브라우저 또는 실행 환경에서 WebGL이 비활성화되어 있습니다.';
 }
 
 function createRenderableGeometry(mesh: TransferableMeshData) {
@@ -112,10 +129,18 @@ export function ViewportScene({
 }: ViewportSceneProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const meshEntriesRef = useRef<MeshEntry[]>([]);
+  const [rendererError, setRendererError] = useState<string | null>(null);
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container) {
+      return;
+    }
+
+    setRendererError(null);
+    const webglBlockReason = getWebGLBlockReason();
+    if (webglBlockReason) {
+      setRendererError(webglBlockReason);
       return;
     }
 
@@ -130,7 +155,22 @@ export function ViewportScene({
     );
     camera.position.set(12, 10, 12);
 
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+    let renderer: THREE.WebGLRenderer;
+    try {
+      renderer = new THREE.WebGLRenderer({
+        antialias: true,
+        alpha: false,
+        powerPreference: 'high-performance',
+      });
+    } catch (error) {
+      setRendererError(
+        error instanceof Error
+          ? error.message
+          : '현재 환경에서 WebGL 컨텍스트를 만들 수 없습니다.'
+      );
+      return;
+    }
+
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(container.clientWidth, container.clientHeight);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
@@ -265,7 +305,9 @@ export function ViewportScene({
 
       meshEntriesRef.current = [];
       renderer.dispose();
-      container.removeChild(renderer.domElement);
+      if (renderer.domElement.parentElement === container) {
+        container.removeChild(renderer.domElement);
+      }
     };
   }, [meshes, onSelectEntity]);
 
@@ -273,5 +315,16 @@ export function ViewportScene({
     updateMeshVisualState(meshEntriesRef.current, selectedEntityId, hiddenEntityIds);
   }, [hiddenEntityIds, selectedEntityId]);
 
-  return <div ref={containerRef} className="viewer-viewport__canvas" />;
+  return (
+    <div ref={containerRef} className="viewer-viewport__canvas">
+      {rendererError && (
+        <div className="viewer-viewport__webgl-fallback">
+          <h2>WebGL을 사용할 수 없습니다</h2>
+          <p>현재 브라우저 환경에서 3D 렌더러를 초기화하지 못했습니다.</p>
+          <p>{rendererError}</p>
+          <p>브라우저 하드웨어 가속 또는 WebGL 설정을 확인한 뒤 다시 시도해 주세요.</p>
+        </div>
+      )}
+    </div>
+  );
 }

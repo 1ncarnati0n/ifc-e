@@ -1,4 +1,5 @@
 import { useWebIfc } from '@/hooks/useWebIfc';
+import { useViewportGeometry } from '@/services/viewportGeometryStore';
 import { useViewerStore } from '@/stores';
 import { ViewportScene } from './ViewportScene';
 
@@ -7,6 +8,7 @@ export function ViewportContainer() {
   const setSelectedEntityId = useViewerStore((state) => state.setSelectedEntityId);
   const clearSelection = useViewerStore((state) => state.clearSelection);
   const hiddenEntityIds = useViewerStore((state) => state.hiddenEntityIds);
+  const { meshes } = useViewportGeometry();
   const {
     loading,
     progress,
@@ -18,9 +20,8 @@ export function ViewportContainer() {
     currentModelId,
     currentModelSchema,
     currentModelMaxExpressId,
-    streamedMeshes,
   } = useWebIfc();
-  const hasRenderableGeometry = geometryResult.ready && streamedMeshes.length > 0;
+  const hasRenderableGeometry = geometryResult.ready && meshes.length > 0;
 
   return (
     <section className="viewer-viewport">
@@ -28,7 +29,7 @@ export function ViewportContainer() {
       <div className="viewer-viewport__surface">
         {hasRenderableGeometry ? (
           <ViewportScene
-            meshes={streamedMeshes}
+            meshes={meshes}
             selectedEntityId={selectedEntityId}
             hiddenEntityIds={[...hiddenEntityIds]}
             onSelectEntity={setSelectedEntityId}

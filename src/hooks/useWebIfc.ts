@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { ifcWorkerClient } from '@/services/IfcWorkerClient';
+import { viewportGeometryStore } from '@/services/viewportGeometryStore';
 import { useViewerStore } from '@/stores';
 import type { IfcSpatialNode } from '@/types/worker-messages';
 
@@ -37,9 +38,6 @@ export function useWebIfc() {
     geometryIndexCount,
     setGeometrySummary,
     resetGeometrySummary,
-    streamedMeshes,
-    setStreamedMeshes,
-    clearStreamedMeshes,
     spatialTree,
     setSpatialTree,
     clearSpatialTree,
@@ -94,7 +92,7 @@ export function useWebIfc() {
     setLoading(true, `${file.name} 로딩 중`);
     setGeometryReady(false);
     resetGeometrySummary();
-    clearStreamedMeshes();
+    viewportGeometryStore.clear();
     clearSpatialTree();
     setCurrentFileName(file.name);
 
@@ -110,7 +108,7 @@ export function useWebIfc() {
       setCurrentModelInfo(result.modelId, result.schema, result.maxExpressId);
       setLoading(true, `${file.name} geometry 추출 중`);
       const streamed = await ifcWorkerClient.streamMeshes(result.modelId);
-      setStreamedMeshes(streamed.meshes);
+      viewportGeometryStore.setMeshes(streamed.meshes);
       setGeometrySummary(streamed.meshCount, streamed.vertexCount, streamed.indexCount);
       setLoading(true, `${file.name} spatial tree 구성 중`);
       const spatial = await ifcWorkerClient.getSpatialStructure(result.modelId);
@@ -120,14 +118,13 @@ export function useWebIfc() {
     } catch (error) {
       setGeometryReady(false);
       resetGeometrySummary();
-      clearStreamedMeshes();
+      viewportGeometryStore.clear();
       clearSpatialTree();
       setLoading(false, '로딩 실패');
       throw error;
     }
   }, [
     clearSpatialTree,
-    clearStreamedMeshes,
     clearCurrentModelInfo,
     currentModelId,
     initEngine,
@@ -138,7 +135,6 @@ export function useWebIfc() {
     setGeometrySummary,
     setLoading,
     setSpatialTree,
-    setStreamedMeshes,
   ]);
 
   const resetSession = useCallback(async () => {
@@ -160,12 +156,11 @@ export function useWebIfc() {
     clearCurrentModelInfo();
     setGeometryReady(false);
     resetGeometrySummary();
-    clearStreamedMeshes();
+    viewportGeometryStore.clear();
     clearSpatialTree();
   }, [
     clearCurrentModelInfo,
     clearSpatialTree,
-    clearStreamedMeshes,
     currentModelId,
     resetGeometrySummary,
     resetLoading,
@@ -219,7 +214,6 @@ export function useWebIfc() {
     currentModelSchema,
     currentModelMaxExpressId,
     geometryResult,
-    streamedMeshes,
     spatialTree: resolvedSpatialTree,
     properties,
     engineState,

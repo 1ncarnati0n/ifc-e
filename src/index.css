@@ -233,6 +233,31 @@ button:hover {
   height: 100%;
 }
 
+.viewer-viewport__webgl-fallback {
+  position: absolute;
+  inset: 24px;
+  display: grid;
+  align-content: center;
+  gap: 10px;
+  padding: 28px;
+  border: 1px solid #dbe4f0;
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 10px 30px rgba(148, 163, 184, 0.12);
+  color: #334155;
+}
+
+.viewer-viewport__webgl-fallback h2 {
+  margin: 0;
+  color: #0f172a;
+  font-size: 1.2rem;
+}
+
+.viewer-viewport__webgl-fallback p {
+  margin: 0;
+  color: #475569;
+}
+
 .viewer-viewport__empty-state {
   position: absolute;
   inset: 0;
