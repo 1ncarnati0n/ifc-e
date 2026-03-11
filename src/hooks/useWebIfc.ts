@@ -34,6 +34,10 @@ export function useWebIfc() {
     spatialTree,
     setSpatialTree,
     clearSpatialTree,
+    activeClassFilter,
+    activeTypeFilter,
+    activeStoreyFilter,
+    resetFilters,
     selectedEntityId,
     clearSelection,
     selectedProperties,
@@ -96,6 +100,7 @@ export function useWebIfc() {
     clearSpatialTree();
     clearSelection();
     clearSelectedProperties();
+    resetFilters();
     setCurrentFileName(file.name);
 
     try {
@@ -124,6 +129,7 @@ export function useWebIfc() {
       clearSpatialTree();
       clearSelection();
       clearSelectedProperties();
+      resetFilters();
       setLoading(false, '로딩 실패');
       throw error;
     }
@@ -134,6 +140,7 @@ export function useWebIfc() {
     clearCurrentModelInfo,
     currentModelId,
     initEngine,
+    resetFilters,
     resetGeometrySummary,
     setCurrentFileName,
     setCurrentModelInfo,
@@ -166,12 +173,14 @@ export function useWebIfc() {
     clearSpatialTree();
     clearSelection();
     clearSelectedProperties();
+    resetFilters();
   }, [
     clearSelectedProperties,
     clearSelection,
     clearCurrentModelInfo,
     clearSpatialTree,
     currentModelId,
+    resetFilters,
     resetGeometrySummary,
     resetLoading,
     setCurrentFileName,
@@ -254,6 +263,9 @@ export function useWebIfc() {
     currentModelMaxExpressId,
     geometryResult,
     spatialTree: resolvedSpatialTree,
+    activeClassFilter,
+    activeTypeFilter,
+    activeStoreyFilter,
     properties,
     propertiesLoading,
     propertiesError,
