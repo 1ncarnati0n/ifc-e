@@ -22,16 +22,34 @@ function findStoreyNode(nodes: IfcSpatialNode[], targetStoreyId: number): IfcSpa
   return null;
 }
 
-function collectDescendantIds(node: IfcSpatialNode, result = new Set<number>()) {
-  result.add(node.expressID);
-  node.children.forEach((child) => collectDescendantIds(child, result));
+function collectRenderableNodeEntityIds(
+  node: IfcSpatialNode,
+  renderableEntityIds: Set<number>,
+  result = new Set<number>()
+) {
+  if (renderableEntityIds.has(node.expressID)) {
+    result.add(node.expressID);
+  }
+
+  node.elements?.forEach((element) => {
+    if (renderableEntityIds.has(element.expressID)) {
+      result.add(element.expressID);
+    }
+  });
+
+  node.children.forEach((child) => {
+    collectRenderableNodeEntityIds(child, renderableEntityIds, result);
+  });
+
   return result;
 }
 
 export function ViewportContainer() {
   const [debugPanelOpen, setDebugPanelOpen] = useState(false);
   const selectedEntityId = useViewerStore((state) => state.selectedEntityId);
+  const selectedEntityIds = useViewerStore((state) => state.selectedEntityIds);
   const setSelectedEntityId = useViewerStore((state) => state.setSelectedEntityId);
+  const setSelectedEntityIds = useViewerStore((state) => state.setSelectedEntityIds);
   const hiddenEntityIds = useViewerStore((state) => state.hiddenEntityIds);
   const viewportCommand = useViewerStore((state) => state.viewportCommand);
   const { meshes } = useViewportGeometry();
@@ -97,6 +115,7 @@ export function ViewportContainer() {
     };
   }, [currentFileName, engineMessage, engineState, error, loading, progress]);
   const entityIds = useMemo(() => [...new Set(meshes.map((mesh) => mesh.expressId))], [meshes]);
+  const renderableEntityIdSet = useMemo(() => new Set(entityIds), [entityIds]);
   const filteredHiddenIds = useMemo(() => {
     if (!hasRenderableGeometry) {
       return [];
@@ -124,14 +143,22 @@ export function ViewportContainer() {
         return [];
       }
 
-      const visibleIds = collectDescendantIds(storeyNode);
+      const visibleIds = collectRenderableNodeEntityIds(storeyNode, renderableEntityIdSet);
       return meshes
         .filter((mesh) => !visibleIds.has(mesh.expressId))
         .map((mesh) => mesh.expressId);
     })();
 
     return [...new Set([...hiddenByClass, ...hiddenByType, ...hiddenByStorey])];
-  }, [activeClassFilter, activeStoreyFilter, activeTypeFilter, hasRenderableGeometry, meshes, spatialTree]);
+  }, [
+    activeClassFilter,
+    activeStoreyFilter,
+    activeTypeFilter,
+    hasRenderableGeometry,
+    meshes,
+    renderableEntityIdSet,
+    spatialTree,
+  ]);
   const effectiveHiddenIds = useMemo(
     () => [...new Set([...hiddenEntityIds, ...filteredHiddenIds])],
     [filteredHiddenIds, hiddenEntityIds]
@@ -152,14 +179,15 @@ export function ViewportContainer() {
   }, [activeClassFilter, activeStoreyFilter, activeTypeFilter]);
 
   useEffect(() => {
-    if (selectedEntityId === null) {
+    if (selectedEntityIds.length === 0) {
       return;
     }
 
-    if (effectiveHiddenIdSet.has(selectedEntityId)) {
-      setSelectedEntityId(null);
+    const visibleSelectedIds = selectedEntityIds.filter((entityId) => !effectiveHiddenIdSet.has(entityId));
+    if (visibleSelectedIds.length !== selectedEntityIds.length) {
+      setSelectedEntityIds(visibleSelectedIds);
     }
-  }, [effectiveHiddenIdSet, selectedEntityId, setSelectedEntityId]);
+  }, [effectiveHiddenIdSet, selectedEntityIds, setSelectedEntityIds]);
 
   return (
     <section className="viewer-viewport">
@@ -168,10 +196,24 @@ export function ViewportContainer() {
         {hasRenderableGeometry ? (
           <ViewportScene
             meshes={meshes}
-            selectedEntityId={selectedEntityId}
+            selectedEntityIds={selectedEntityIds}
             hiddenEntityIds={effectiveHiddenIds}
             viewportCommand={viewportCommand}
-            onSelectEntity={setSelectedEntityId}
+            onSelectEntity={(expressId, additive = false) => {
+              if (!additive) {
+                setSelectedEntityId(expressId);
+                return;
+              }
+
+              if (expressId === null) {
+                return;
+              }
+
+              const next = selectedEntityIds.includes(expressId)
+                ? selectedEntityIds.filter((entityId) => entityId !== expressId)
+                : [...selectedEntityIds, expressId];
+              setSelectedEntityIds(next);
+            }}
           />
         ) : (
           <div className={`viewer-viewport__empty-state viewer-viewport__empty-state--${emptyState.tone}`}>
@@ -217,7 +259,11 @@ export function ViewportContainer() {
                   </div>
                   <div className="viewer-viewport__meta-card">
                     <span>선택 상태</span>
-                    <strong>{selectedEntityId ?? '없음'}</strong>
+                    <strong>
+                      {selectedEntityIds.length > 0
+                        ? `${selectedEntityIds.length} selected${selectedEntityId !== null ? ` · primary #${selectedEntityId}` : ''}`
+                        : '없음'}
+                    </strong>
                     <small>
                       {activeFilterSummary
                         ? `필터 적용 중 · ${activeFilterSummary}`

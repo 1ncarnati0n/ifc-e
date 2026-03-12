@@ -549,45 +549,6 @@ button:hover {
   left: 16px;
 }
 
-.viewer-viewport__camera-pad {
-  position: absolute;
-  top: 0;
-  right: 0;
-  display: grid;
-  justify-items: center;
-  gap: 6px;
-  z-index: 8;
-}
-
-.viewer-viewport__camera-pad-row {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.viewer-viewport__camera-pad button {
-  min-width: 52px;
-  height: 32px;
-  padding: 0 10px;
-  border: 1px solid rgba(203, 213, 225, 0.95);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.92);
-  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
-  color: #334155;
-  font-size: 0.72rem;
-  font-weight: 700;
-}
-
-.viewer-viewport__camera-pad button:hover:not(:disabled) {
-  background: #ffffff;
-  border-color: #93c5fd;
-}
-
-.viewer-viewport__camera-pad button:disabled {
-  opacity: 0.56;
-  cursor: default;
-}
-
 .viewer-viewport__debug-panel {
   position: absolute;
   right: 0;
@@ -985,6 +946,74 @@ button:hover {
   gap: 10px;
 }
 
+.viewer-tree__model-header {
+  display: grid;
+  gap: 10px;
+  padding: 12px;
+  border-bottom: 1px solid #e2e8f0;
+  background:
+    linear-gradient(180deg, rgba(248, 250, 252, 0.96), rgba(255, 255, 255, 0.92));
+}
+
+.viewer-tree__model-copy {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.viewer-tree__model-copy strong {
+  display: block;
+  color: #0f172a;
+  font-size: 0.78rem;
+  line-height: 1.2;
+}
+
+.viewer-tree__model-copy small {
+  display: block;
+  margin-top: 2px;
+  color: #64748b;
+  font-size: 0.67rem;
+  line-height: 1.2;
+}
+
+.viewer-tree__model-badges {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.viewer-tree__model-stats {
+  display: grid;
+  gap: 8px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.viewer-tree__model-stat {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 8px 9px;
+  border: 1px solid #dbe4f0;
+  background: rgba(255, 255, 255, 0.94);
+}
+
+.viewer-tree__model-stat span {
+  color: #64748b;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.viewer-tree__model-stat strong {
+  color: #0f172a;
+  font-size: 0.75rem;
+  line-height: 1.15;
+}
+
 .viewer-panel__scroll {
   min-height: 0;
   overflow: auto;
@@ -1055,8 +1084,8 @@ button:hover {
 }
 
 .viewer-tree__item {
-  min-height: 32px;
-  padding: 0.38rem 0.5rem;
+  min-height: 30px;
+  padding: 0.3rem 0.5rem;
   border: 0;
   background: transparent;
   box-shadow: none;
@@ -1069,7 +1098,7 @@ button:hover {
 }
 
 .viewer-tree__item--leaf .viewer-tree__subtle {
-  font-size: 0.67rem;
+  font-size: 0.65rem;
 }
 
 .viewer-tree__chevron svg {
@@ -1083,11 +1112,11 @@ button:hover {
 .viewer-tree__copy {
   display: grid;
   min-width: 0;
-  gap: 1px;
+  gap: 0;
 }
 
 .viewer-tree__label {
-  font-size: 0.77rem;
+  font-size: 0.74rem;
   line-height: 1.15;
 }
 
@@ -1096,20 +1125,23 @@ button:hover {
   text-overflow: ellipsis;
   white-space: nowrap;
   color: #64748b;
-  font-size: 0.69rem;
+  font-size: 0.65rem;
   line-height: 1.1;
 }
 
 .viewer-tree__meta-id {
-  font-size: 0.68rem;
+  color: #64748b;
+  font-size: 0.63rem;
   opacity: 0.9;
 }
 
 .viewer-tree__meta-group {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  margin-left: 8px;
+  gap: 4px;
+  margin-left: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
 }
 
 .viewer-tree__actions {
@@ -1142,6 +1174,11 @@ button:hover {
   color: #334155;
 }
 
+.viewer-tree__action--accent:hover {
+  background: rgba(37, 99, 235, 0.12);
+  color: #1d4ed8;
+}
+
 .viewer-tree__action:focus-visible {
   outline: 2px solid #93c5fd;
   outline-offset: 1px;
@@ -1151,12 +1188,12 @@ button:hover {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: 18px;
-  padding: 0 6px;
+  min-height: 16px;
+  padding: 0 5px;
   border: 1px solid #dbe4f0;
   background: rgba(248, 250, 252, 0.92);
   color: #475569;
-  font-size: 0.64rem;
+  font-size: 0.6rem;
   font-weight: 700;
   line-height: 1;
   letter-spacing: 0.01em;
@@ -1184,7 +1221,7 @@ button:hover {
 }
 
 .viewer-tree__item-main {
-  gap: 6px;
+  gap: 5px;
 }
 
 .viewer-tree__icon {
@@ -1229,6 +1266,51 @@ button:hover {
   color: #1d4ed8;
   font-size: 0.7rem;
   font-weight: 700;
+}
+
+.viewer-tree__scope-card {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid #dbe4f0;
+  background: rgba(248, 250, 252, 0.82);
+}
+
+.viewer-tree__scope-copy strong {
+  display: block;
+  color: #0f172a;
+  font-size: 0.72rem;
+  line-height: 1.1;
+}
+
+.viewer-tree__scope-copy small {
+  display: block;
+  margin-top: 2px;
+  color: #64748b;
+  font-size: 0.64rem;
+  line-height: 1.15;
+}
+
+.viewer-tree__scope-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.viewer-tree__scope-actions button,
+.viewer-panel__meta--accent button {
+  height: 24px;
+  padding: 0 8px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  background: rgba(255, 255, 255, 0.94);
+  color: #334155;
+  font-size: 0.66rem;
+  font-weight: 700;
+}
+
+.viewer-tree__scope-actions button:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 .viewer-tree__section-header {

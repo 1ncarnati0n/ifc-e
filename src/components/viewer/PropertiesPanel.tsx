@@ -61,6 +61,7 @@ function PropertySectionList({
 export function PropertiesPanel() {
   const [activeTab, setActiveTab] = useState<InspectorTab>('properties');
   const selectedEntityId = useViewerStore((state) => state.selectedEntityId);
+  const selectedEntityIds = useViewerStore((state) => state.selectedEntityIds);
   const hideEntity = useViewerStore((state) => state.hideEntity);
   const hiddenEntityIds = useViewerStore((state) => state.hiddenEntityIds);
   const resetHiddenEntities = useViewerStore((state) => state.resetHiddenEntities);
@@ -128,21 +129,25 @@ export function PropertiesPanel() {
               </span>
               <div>
                 <strong>{selectedEntityId ?? 'No selection'}</strong>
-                <small>현재 선택된 IFC 엔티티</small>
+                <small>
+                  {selectedEntityIds.length > 1
+                    ? `${selectedEntityIds.length}개 선택 중 · primary entity`
+                    : '현재 선택된 IFC 엔티티'}
+                </small>
               </div>
             </div>
             <div className="viewer-panel__actions viewer-panel__actions--stacked">
               <button
                 type="button"
                 onClick={() => {
-                  if (selectedEntityId !== null) {
-                    hideEntity(selectedEntityId);
+                  if (selectedEntityIds.length > 0) {
+                    selectedEntityIds.forEach((entityId) => hideEntity(entityId));
                   }
                 }}
-                disabled={selectedEntityId === null}
+                disabled={selectedEntityIds.length === 0}
               >
                 <EyeOff size={14} strokeWidth={2} />
-                <span>선택 숨기기</span>
+                <span>{selectedEntityIds.length > 1 ? `선택 ${selectedEntityIds.length}개 숨기기` : '선택 숨기기'}</span>
               </button>
               <button type="button" onClick={resetHiddenEntities}>
                 <Info size={14} strokeWidth={2} />
@@ -153,7 +158,11 @@ export function PropertiesPanel() {
           <div className="viewer-panel__meta-grid">
             <div className="viewer-panel__meta viewer-panel__meta--card">
               <span>현재 선택</span>
-              <strong>{selectedEntityId ?? '없음'}</strong>
+              <strong>
+                {selectedEntityIds.length > 0
+                  ? `${selectedEntityIds.length} selected${selectedEntityId !== null ? ` · #${selectedEntityId}` : ''}`
+                  : '없음'}
+              </strong>
             </div>
             <div className="viewer-panel__meta viewer-panel__meta--card">
               <span>숨김 개수</span>
@@ -249,7 +258,7 @@ export function PropertiesPanel() {
         </div>
       </div>
       <div className="viewer-panel__footer">
-        <span>{selectedEntityId === null ? 'Inspector idle' : 'Inspector ready'}</span>
+        <span>{selectedEntityIds.length === 0 ? 'Inspector idle' : 'Inspector ready'}</span>
         <strong>{hiddenEntityIds.size} hidden</strong>
       </div>
     </aside>

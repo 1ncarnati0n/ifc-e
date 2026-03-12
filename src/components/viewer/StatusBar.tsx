@@ -3,6 +3,7 @@ import { useViewerStore } from '@/stores';
 
 export function StatusBar() {
   const selectedEntityId = useViewerStore((state) => state.selectedEntityId);
+  const selectedEntityIds = useViewerStore((state) => state.selectedEntityIds);
   const hiddenEntityIds = useViewerStore((state) => state.hiddenEntityIds);
   const { loading, progress, engineState, currentModelSchema, currentFileName, error } = useWebIfc();
   const statusText = error ? `Error: ${error}` : loading ? progress : 'Viewer ready';
@@ -15,7 +16,12 @@ export function StatusBar() {
       </span>
       <span className="viewer-statusbar__item">Engine: {engineState}</span>
       <span className="viewer-statusbar__item">Schema: {currentModelSchema ?? '-'}</span>
-      <span className="viewer-statusbar__item">Selection: {selectedEntityId ?? 'none'}</span>
+      <span className="viewer-statusbar__item">
+        Selection:{' '}
+        {selectedEntityIds.length > 0
+          ? `${selectedEntityIds.length}${selectedEntityId !== null ? ` · primary #${selectedEntityId}` : ''}`
+          : 'none'}
+      </span>
       <span className="viewer-statusbar__item">Hidden: {hiddenEntityIds.size}</span>
     </footer>
   );

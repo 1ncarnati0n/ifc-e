@@ -11,10 +11,10 @@ import type { TransferableMeshData } from '@/types/worker-messages';
 
 interface ViewportSceneProps {
   meshes: TransferableMeshData[];
-  selectedEntityId: number | null;
+  selectedEntityIds: number[];
   hiddenEntityIds: number[];
   viewportCommand: ViewportCommand;
-  onSelectEntity: (expressId: number | null) => void;
+  onSelectEntity: (expressId: number | null, additive?: boolean) => void;
 }
 
 interface GeometryCacheEntry {
@@ -37,6 +37,8 @@ interface InstanceGroup {
 }
 
 const HIDDEN_SCALE_MATRIX = new THREE.Matrix4().makeScale(0, 0, 0);
+const GIZMO_VIEW_SIZE = 92;
+const GIZMO_VIEW_PADDING = 18;
 
 const bvhExtensions = THREE.BufferGeometry.prototype as THREE.BufferGeometry & {
   computeBoundsTree?: typeof computeBoundsTree;
@@ -114,11 +116,6 @@ function getOrCreateGeometry(
   return geometry;
 }
 
-function fitCameraToObject(camera: THREE.PerspectiveCamera, controls: OrbitControls, object: THREE.Object3D) {
-  const bounds = new THREE.Box3().setFromObject(object);
-  fitCameraToBounds(camera, controls, bounds);
-}
-
 function fitCameraToBounds(
   camera: THREE.PerspectiveCamera,
   controls: OrbitControls,
@@ -145,17 +142,18 @@ function fitCameraToBoundsWithDirection(
   const maxDimension = Math.max(size.x, size.y, size.z);
   const fitHeightDistance = maxDimension / (2 * Math.tan((Math.PI * camera.fov) / 360));
   const fitWidthDistance = fitHeightDistance / camera.aspect;
-  const distance = 1.4 * Math.max(fitHeightDistance, fitWidthDistance);
+  const distance = 1.18 * Math.max(fitHeightDistance, fitWidthDistance);
   const normalizedDirection = direction.clone().normalize();
 
   camera.near = Math.max(distance / 100, 0.1);
-  camera.far = Math.max(distance * 100, 2000);
+  camera.far = Math.max(distance * 120, 2400);
   camera.position.copy(center).addScaledVector(normalizedDirection, distance);
   camera.lookAt(center);
   camera.updateProjectionMatrix();
 
   controls.target.copy(center);
-  controls.maxDistance = distance * 8;
+  controls.minDistance = Math.max(distance * 0.08, 0.2);
+  controls.maxDistance = distance * 12;
   controls.update();
 }
 
@@ -225,14 +223,15 @@ function setEntryVisualState(entry: RenderEntry, isHidden: boolean, isSelected: 
 
 function updateMeshVisualState(
   meshEntries: RenderEntry[],
-  selectedEntityId: number | null,
+  selectedEntityIds: number[],
   hiddenEntityIds: number[]
 ) {
   const hiddenSet = new Set(hiddenEntityIds);
+  const selectedSet = new Set(selectedEntityIds);
 
   for (const entry of meshEntries) {
     const isHidden = hiddenSet.has(entry.expressId);
-    const isSelected = selectedEntityId !== null && entry.expressId === selectedEntityId;
+    const isSelected = selectedSet.has(entry.expressId);
     setEntryVisualState(entry, isHidden, isSelected);
   }
 }
@@ -247,9 +246,71 @@ function expandBoundsForEntry(bounds: THREE.Box3, entry: RenderEntry) {
   bounds.union(transformedBounds);
 }
 
+function buildBoundsForEntries(meshEntries: RenderEntry[], hiddenEntityIds: number[] = []) {
+  const hiddenSet = new Set(hiddenEntityIds);
+  const bounds = new THREE.Box3();
+
+  meshEntries.forEach((entry) => {
+    if (hiddenSet.has(entry.expressId)) {
+      return;
+    }
+
+    expandBoundsForEntry(bounds, entry);
+  });
+
+  if (!bounds.isEmpty()) {
+    return bounds;
+  }
+
+  meshEntries.forEach((entry) => {
+    expandBoundsForEntry(bounds, entry);
+  });
+
+  return bounds;
+}
+
+function createAxisLabelSprite(label: string, color: string) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 128;
+  canvas.height = 128;
+
+  const context = canvas.getContext('2d');
+  if (!context) {
+    return null;
+  }
+
+  context.clearRect(0, 0, canvas.width, canvas.height);
+  context.fillStyle = 'rgba(255, 255, 255, 0.96)';
+  context.beginPath();
+  context.arc(64, 64, 34, 0, Math.PI * 2);
+  context.fill();
+
+  context.lineWidth = 8;
+  context.strokeStyle = color;
+  context.stroke();
+
+  context.fillStyle = color;
+  context.font = '700 52px Inter, sans-serif';
+  context.textAlign = 'center';
+  context.textBaseline = 'middle';
+  context.fillText(label, 64, 66);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.colorSpace = THREE.SRGBColorSpace;
+  const material = new THREE.SpriteMaterial({
+    map: texture,
+    depthTest: false,
+    depthWrite: false,
+    transparent: true,
+  });
+  const sprite = new THREE.Sprite(material);
+  sprite.scale.setScalar(0.42);
+  return { sprite, texture, material };
+}
+
 export function ViewportScene({
   meshes,
-  selectedEntityId,
+  selectedEntityIds,
   hiddenEntityIds,
   viewportCommand,
   onSelectEntity,
@@ -259,7 +320,23 @@ export function ViewportScene({
   const groupRef = useRef<THREE.Group | null>(null);
   const cameraRef = useRef<THREE.PerspectiveCamera | null>(null);
   const controlsRef = useRef<OrbitControls | null>(null);
+  const onSelectEntityRef = useRef(onSelectEntity);
+  const selectedEntityIdsRef = useRef(selectedEntityIds);
+  const hiddenEntityIdsRef = useRef(hiddenEntityIds);
+  const lastHandledViewportCommandSeqRef = useRef(0);
   const [rendererError, setRendererError] = useState<string | null>(null);
+
+  useEffect(() => {
+    onSelectEntityRef.current = onSelectEntity;
+  }, [onSelectEntity]);
+
+  useEffect(() => {
+    selectedEntityIdsRef.current = selectedEntityIds;
+  }, [selectedEntityIds]);
+
+  useEffect(() => {
+    hiddenEntityIdsRef.current = hiddenEntityIds;
+  }, [hiddenEntityIds]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -275,7 +352,7 @@ export function ViewportScene({
     }
 
     const scene = new THREE.Scene();
-    scene.background = new THREE.Color('#f7f9fc');
+    scene.background = new THREE.Color('#edf4fb');
 
     const camera = new THREE.PerspectiveCamera(
       48,
@@ -302,36 +379,92 @@ export function ViewportScene({
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.setSize(container.clientWidth, container.clientHeight);
     renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.08;
+    renderer.autoClear = false;
     container.appendChild(renderer.domElement);
 
     const controls = new OrbitControls(camera, renderer.domElement);
     controls.enableDamping = true;
     controls.dampingFactor = 0.08;
     controls.screenSpacePanning = true;
+    controls.rotateSpeed = 0.78;
+    controls.zoomSpeed = 1.08;
+    controls.panSpeed = 0.92;
     controls.target.set(0, 0, 0);
 
-    scene.add(new THREE.AmbientLight('#ffffff', 1.8));
+    scene.add(new THREE.HemisphereLight('#f8fbff', '#cbd5e1', 1.55));
 
-    const keyLight = new THREE.DirectionalLight('#ffffff', 1.15);
+    const keyLight = new THREE.DirectionalLight('#ffffff', 1.45);
     keyLight.position.set(16, 28, 18);
     scene.add(keyLight);
 
-    const fillLight = new THREE.DirectionalLight('#dbeafe', 0.5);
-    fillLight.position.set(-12, 10, -10);
+    const fillLight = new THREE.DirectionalLight('#dbeafe', 0.92);
+    fillLight.position.set(-18, 16, -12);
     scene.add(fillLight);
 
-    const grid = new THREE.GridHelper(120, 24, '#e2e8f0', '#edf2f7');
+    const rimLight = new THREE.DirectionalLight('#bfdbfe', 0.72);
+    rimLight.position.set(10, 8, -24);
+    scene.add(rimLight);
+
+    const grid = new THREE.GridHelper(140, 28, '#cbd5e1', '#e5edf6');
     const gridMaterial = grid.material;
     if (Array.isArray(gridMaterial)) {
       gridMaterial.forEach((material) => {
         material.transparent = true;
-        material.opacity = 0.28;
+        material.opacity = 0.36;
       });
     } else {
       gridMaterial.transparent = true;
-      gridMaterial.opacity = 0.28;
+      gridMaterial.opacity = 0.36;
     }
     scene.add(grid);
+
+    const gizmoScene = new THREE.Scene();
+    const gizmoCamera = new THREE.PerspectiveCamera(34, 1, 0.1, 10);
+    gizmoCamera.position.set(0, 0, 3);
+    gizmoCamera.lookAt(0, 0, 0);
+
+    const gizmoRoot = new THREE.Group();
+    const gizmoBackdrop = new THREE.Mesh(
+      new THREE.SphereGeometry(0.9, 28, 28),
+      new THREE.MeshBasicMaterial({
+        color: '#ffffff',
+        transparent: true,
+        opacity: 0.82,
+        depthWrite: false,
+      })
+    );
+    gizmoRoot.add(gizmoBackdrop);
+
+    const gizmoAxes = new THREE.AxesHelper(0.95);
+    gizmoRoot.add(gizmoAxes);
+
+    const gizmoDisposables: Array<THREE.Material | THREE.Texture | THREE.BufferGeometry> = [
+      gizmoBackdrop.geometry,
+      gizmoBackdrop.material,
+    ];
+    const xLabel = createAxisLabelSprite('X', '#ef4444');
+    const yLabel = createAxisLabelSprite('Y', '#10b981');
+    const zLabel = createAxisLabelSprite('Z', '#2563eb');
+
+    if (xLabel) {
+      xLabel.sprite.position.set(1.08, 0, 0);
+      gizmoRoot.add(xLabel.sprite);
+      gizmoDisposables.push(xLabel.texture, xLabel.material);
+    }
+    if (yLabel) {
+      yLabel.sprite.position.set(0, 1.08, 0);
+      gizmoRoot.add(yLabel.sprite);
+      gizmoDisposables.push(yLabel.texture, yLabel.material);
+    }
+    if (zLabel) {
+      zLabel.sprite.position.set(0, 0, 1.08);
+      gizmoRoot.add(zLabel.sprite);
+      gizmoDisposables.push(zLabel.texture, zLabel.material);
+    }
+
+    gizmoScene.add(gizmoRoot);
 
     const group = new THREE.Group();
     scene.add(group);
@@ -354,8 +487,8 @@ export function ViewportScene({
           color: baseColor.clone(),
           transparent: baseOpacity < 1,
           opacity: baseOpacity,
-          metalness: 0.03,
-          roughness: 0.82,
+          metalness: 0.06,
+          roughness: 0.64,
           side: THREE.DoubleSide,
         });
         materials.add(material);
@@ -381,8 +514,8 @@ export function ViewportScene({
         color: '#ffffff',
         transparent: baseOpacity < 1,
         opacity: baseOpacity,
-        metalness: 0.03,
-        roughness: 0.82,
+        metalness: 0.06,
+        roughness: 0.64,
         side: THREE.DoubleSide,
       });
       materials.add(material);
@@ -415,14 +548,50 @@ export function ViewportScene({
     }
 
     meshEntriesRef.current = meshEntries;
-    updateMeshVisualState(meshEntriesRef.current, selectedEntityId, hiddenEntityIds);
-    fitCameraToObject(camera, controls, group);
+    updateMeshVisualState(meshEntriesRef.current, selectedEntityIds, hiddenEntityIds);
+    fitCameraToBounds(camera, controls, buildBoundsForEntries(meshEntriesRef.current, hiddenEntityIds));
 
     const raycaster = new THREE.Raycaster();
     (raycaster as THREE.Raycaster & { firstHitOnly?: boolean }).firstHitOnly = true;
     const pointer = new THREE.Vector2();
+    let pointerIsDown = false;
+    let didDrag = false;
+    let pointerDownX = 0;
+    let pointerDownY = 0;
+
+    const handlePointerDown = (event: PointerEvent) => {
+      if (event.button !== 0) {
+        return;
+      }
+
+      pointerIsDown = true;
+      didDrag = false;
+      pointerDownX = event.clientX;
+      pointerDownY = event.clientY;
+    };
+
+    const handlePointerMove = (event: PointerEvent) => {
+      if (!pointerIsDown) {
+        return;
+      }
+
+      const deltaX = event.clientX - pointerDownX;
+      const deltaY = event.clientY - pointerDownY;
+      if (Math.hypot(deltaX, deltaY) > 4) {
+        didDrag = true;
+      }
+    };
+
+    const handlePointerUp = () => {
+      pointerIsDown = false;
+    };
 
     const handleClick = (event: MouseEvent) => {
+      if (didDrag) {
+        didDrag = false;
+        return;
+      }
+
       const rect = renderer.domElement.getBoundingClientRect();
       pointer.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
       pointer.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
@@ -435,21 +604,26 @@ export function ViewportScene({
       );
 
       if (!firstHit) {
-        onSelectEntity(null);
+        if (!event.shiftKey) {
+          onSelectEntityRef.current(null);
+        }
         return;
       }
 
       if (firstHit.object instanceof THREE.InstancedMesh && firstHit.instanceId !== undefined) {
         const instanceExpressIds = firstHit.object.userData.instanceExpressIds as number[] | undefined;
         const expressId = instanceExpressIds?.[firstHit.instanceId];
-        onSelectEntity(typeof expressId === 'number' ? expressId : null);
+        onSelectEntityRef.current(typeof expressId === 'number' ? expressId : null, event.shiftKey);
         return;
       }
 
       const expressId = firstHit.object.userData.expressId;
-      onSelectEntity(typeof expressId === 'number' ? expressId : null);
+      onSelectEntityRef.current(typeof expressId === 'number' ? expressId : null, event.shiftKey);
     };
 
+    renderer.domElement.addEventListener('pointerdown', handlePointerDown);
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
     renderer.domElement.addEventListener('click', handleClick);
 
     const resizeObserver = new ResizeObserver(() => {
@@ -458,14 +632,32 @@ export function ViewportScene({
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
       renderer.setSize(width, height);
-      renderer.render(scene, camera);
     });
     resizeObserver.observe(container);
 
     let animationFrame = 0;
     const renderFrame = () => {
       controls.update();
+      const viewportWidth = Math.max(1, container.clientWidth);
+      const viewportHeight = Math.max(1, container.clientHeight);
+      const gizmoSize = Math.min(GIZMO_VIEW_SIZE, Math.max(48, Math.floor(Math.min(viewportWidth, viewportHeight) * 0.16)));
+      const gizmoPadding = GIZMO_VIEW_PADDING;
+
+      renderer.setViewport(0, 0, viewportWidth, viewportHeight);
+      renderer.setScissorTest(false);
+      renderer.clear();
       renderer.render(scene, camera);
+
+      gizmoRoot.quaternion.copy(camera.quaternion).invert();
+      renderer.clearDepth();
+      const gizmoX = Math.max(0, viewportWidth - gizmoSize - gizmoPadding);
+      const gizmoY = Math.max(0, viewportHeight - gizmoSize - gizmoPadding);
+      renderer.setViewport(gizmoX, gizmoY, gizmoSize, gizmoSize);
+      renderer.setScissor(gizmoX, gizmoY, gizmoSize, gizmoSize);
+      renderer.setScissorTest(true);
+      renderer.render(gizmoScene, gizmoCamera);
+      renderer.setScissorTest(false);
+      renderer.setViewport(0, 0, viewportWidth, viewportHeight);
       animationFrame = window.requestAnimationFrame(renderFrame);
     };
     renderFrame();
@@ -473,6 +665,9 @@ export function ViewportScene({
     return () => {
       window.cancelAnimationFrame(animationFrame);
       resizeObserver.disconnect();
+      renderer.domElement.removeEventListener('pointerdown', handlePointerDown);
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
       renderer.domElement.removeEventListener('click', handleClick);
       controls.dispose();
 
@@ -481,6 +676,7 @@ export function ViewportScene({
         (geometry as THREE.BufferGeometry & { disposeBoundsTree?: () => void }).disposeBoundsTree?.();
         geometry.dispose();
       });
+      gizmoDisposables.forEach((disposable) => disposable.dispose());
 
       meshEntriesRef.current = [];
       groupRef.current = null;
@@ -491,11 +687,11 @@ export function ViewportScene({
         container.removeChild(renderer.domElement);
       }
     };
-  }, [meshes, onSelectEntity]);
+  }, [meshes]);
 
   useEffect(() => {
-    updateMeshVisualState(meshEntriesRef.current, selectedEntityId, hiddenEntityIds);
-  }, [hiddenEntityIds, selectedEntityId]);
+    updateMeshVisualState(meshEntriesRef.current, selectedEntityIds, hiddenEntityIds);
+  }, [hiddenEntityIds, selectedEntityIds]);
 
   useEffect(() => {
     const camera = cameraRef.current;
@@ -506,8 +702,18 @@ export function ViewportScene({
       return;
     }
 
+    if (viewportCommand.seq <= lastHandledViewportCommandSeqRef.current) {
+      return;
+    }
+
+    lastHandledViewportCommandSeqRef.current = viewportCommand.seq;
+
     if (viewportCommand.type === 'home') {
-      fitCameraToObject(camera, controls, group);
+      fitCameraToBounds(
+        camera,
+        controls,
+        buildBoundsForEntries(meshEntriesRef.current, hiddenEntityIdsRef.current)
+      );
       return;
     }
 
@@ -517,7 +723,7 @@ export function ViewportScene({
       viewportCommand.type === 'view-top' ||
       viewportCommand.type === 'view-iso'
     ) {
-      const bounds = new THREE.Box3().setFromObject(group);
+      const bounds = buildBoundsForEntries(meshEntriesRef.current, hiddenEntityIdsRef.current);
       const directionMap: Record<
         'view-front' | 'view-right' | 'view-top' | 'view-iso',
         THREE.Vector3
@@ -537,11 +743,11 @@ export function ViewportScene({
       return;
     }
 
-    if (viewportCommand.type === 'fit-selected' && selectedEntityId !== null) {
+    if (viewportCommand.type === 'fit-selected' && selectedEntityIds.length > 0) {
       const selectedEntries = meshEntriesRef.current.filter(
         (entry) =>
-          entry.expressId === selectedEntityId &&
-          !hiddenEntityIds.includes(entry.expressId)
+          selectedEntityIdsRef.current.includes(entry.expressId) &&
+          !hiddenEntityIdsRef.current.includes(entry.expressId)
       );
       if (selectedEntries.length === 0) {
         return;
@@ -553,7 +759,7 @@ export function ViewportScene({
       });
       fitCameraToBounds(camera, controls, selectedBounds);
     }
-  }, [hiddenEntityIds, selectedEntityId, viewportCommand]);
+  }, [viewportCommand, selectedEntityIds.length]);
 
   return (
     <div ref={containerRef} className="viewer-viewport__canvas">

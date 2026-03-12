@@ -21,10 +21,10 @@ import { useViewerStore } from '@/stores';
 export function MainToolbar() {
   const leftPanelCollapsed = useViewerStore((state) => state.leftPanelCollapsed);
   const rightPanelCollapsed = useViewerStore((state) => state.rightPanelCollapsed);
-  const selectedEntityId = useViewerStore((state) => state.selectedEntityId);
+  const selectedEntityIds = useViewerStore((state) => state.selectedEntityIds);
   const toggleLeftPanel = useViewerStore((state) => state.toggleLeftPanel);
   const toggleRightPanel = useViewerStore((state) => state.toggleRightPanel);
-  const isolateEntity = useViewerStore((state) => state.isolateEntity);
+  const isolateEntities = useViewerStore((state) => state.isolateEntities);
   const resetHiddenEntities = useViewerStore((state) => state.resetHiddenEntities);
   const runViewportCommand = useViewerStore((state) => state.runViewportCommand);
   const {
@@ -150,7 +150,7 @@ export function MainToolbar() {
             type="button"
             className="viewer-toolbar__icon-button"
             onClick={() => runViewportCommand('fit-selected')}
-            disabled={!hasRenderableGeometry || selectedEntityId === null}
+            disabled={!hasRenderableGeometry || selectedEntityIds.length === 0}
             title="선택 객체에 맞춰 보기"
             aria-label="선택 객체에 맞춰 보기"
             data-tooltip="선택 객체에 맞춰 보기"
@@ -200,17 +200,17 @@ export function MainToolbar() {
             type="button"
             className="viewer-toolbar__icon-button"
             onClick={() => {
-              if (selectedEntityId !== null) {
-                isolateEntity(selectedEntityId, entityIds);
+              if (selectedEntityIds.length > 0) {
+                isolateEntities(selectedEntityIds, entityIds);
               }
             }}
-            disabled={!hasRenderableGeometry || selectedEntityId === null}
+            disabled={!hasRenderableGeometry || selectedEntityIds.length === 0}
             title="선택 객체만 보기"
             aria-label="선택 객체만 보기"
             data-tooltip="선택 객체만 보기"
           >
             <Layers size={16} />
-            <span>Isolate</span>
+            <span>{selectedEntityIds.length > 1 ? 'Isolate Selected' : 'Isolate'}</span>
           </button>
           <button
             type="button"
